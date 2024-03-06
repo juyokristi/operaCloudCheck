@@ -5,9 +5,10 @@ from datetime import datetime
 from io import BytesIO
 import time
 
-# Streamlit UI
+# Streamlit UI setup
 st.title('Opera Cloud PMS Data Checking Tool')
 
+# Input fields
 hostname = st.text_input('Hostname', help='Enter the API Hostname.')
 x_app_key = st.text_input('X-App-Key', help='Enter the x-app-key specific to the hotel.')
 client_id = st.text_input('Client ID', help='Enter the Client ID for Basic Auth.')
@@ -19,6 +20,7 @@ hotel_id = st.text_input('Hotel ID', help='Enter the Hotel ID.')
 start_date = st.date_input('Start Date', help='Select the start date for the report.')
 end_date = st.date_input('End Date', help='Select the end date for the report.')
 
+# Function definitions
 def authenticate():
     url = f"{hostname}/oauth/v1/tokens"
     headers = {
@@ -35,7 +37,7 @@ def authenticate():
     if response.status_code == 200:
         return response.json().get('access_token')
     else:
-        st.error(f'Authentication failed: {response.text}')
+        st.error(f'Authentication failed: {response.status_code} - {response.reason}')
         return None
 
 def async_data_request(token):
@@ -56,7 +58,7 @@ def async_data_request(token):
         location_url = post_response.headers.get('Location')
         return location_url
     else:
-        st.error(f"Failed to initiate data retrieval: {post_response.text}")
+        st.error(f"Failed to initiate data retrieval: {post_response.status_code} - {post_response.reason}")
         return None
 
 def check_async_status(location_url, token):
@@ -65,14 +67,20 @@ def check_async_status(location_url, token):
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
+    # Attempt to check the status for a maximum of 10 minutes
+    timeout = time.time() + 60*10  # 10 minutes from now
     while True:
+        if time.time() > timeout:
+            st.error("Timeout reached while checking data retrieval status.")
+            return None
         head_response = requests.head(location_url, headers=headers)
         if head_response.status_code == 201:
-            return location_url
-        elif head_response.status_code == 202:
-            time.sleep(10)  # Wait before retrying
+            return location_url  # Data is ready
+        elif head_response.status_code in (202, 404):  # Accepted (still processing) or Not Found (data might not be ready yet)
+            time.sleep(10)  # Wait 10 seconds before retrying
         else:
-            st.error(f"Error checking data retrieval status: {head_response.text}")
+            # Handle other unexpected HTTP status codes
+            st.error(f"Error checking data retrieval status: {head_response.status_code} - {head_response.reason}")
             return None
 
 def get_data(location_url, token):
@@ -85,7 +93,7 @@ def get_data(location_url, token):
     if response.status_code == 200:
         return response.json()
     else:
-        st.error(f"Failed to retrieve data: {response.text}")
+        st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
 
 def data_to_excel(data):
@@ -94,17 +102,12 @@ def data_to_excel(data):
     with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False)
     excel_data = excel_file.getvalue()
-    
-    # Display the warning/note message
     st.markdown("""
-    **Note:** This report will download the data as of this moment. Juyo is scheduled to retrieve the data around night audit time, therefore discrepancies may arise.
+    **Note:** This report will download the data as of this moment. Discrepancies may arise if the data is updated.
     """, unsafe_allow_html=True)
+    st.download_button(label='Download Excel file', data=excel_data, file_name='report.xlsx', mime='application/vnd.ms-excel')
 
-    st.download_button(label='Download Excel file',
-                       data=excel_data,
-                       file_name='report.xlsx',
-                       mime='application/vnd.ms-excel')
-
+# Main app logic
 if st.button('Retrieve Data'):
     token = authenticate()
     if token:
