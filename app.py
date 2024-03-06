@@ -82,12 +82,21 @@ def retrieve_data(location_url, token):
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
-    response = requests.get(location_url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
-        return None
+    retry_delay = 10  # seconds
+    max_retries = 5
+    for attempt in range(max_retries):
+        response = requests.get(location_url, headers=headers)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            st.warning(f"Data not found, retrying in {retry_delay} seconds (Attempt {attempt+1}/{max_retries})...")
+            time.sleep(retry_delay)
+        else:
+            st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
+            return None
+    st.error("Data retrieval failed after multiple retries.")
+    return None
+
 
 def data_to_excel(data):
     df = pd.json_normalize(data, 'revInvStats')
