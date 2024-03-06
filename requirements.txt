@@ -1,0 +1,6 @@
+streamlit
+requests
+pandas
+openpyxl
+xlsxwriter
+python-dotenv  # Optional, if you decide to use environment variables for sensitive information
