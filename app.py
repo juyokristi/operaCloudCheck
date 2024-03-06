@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime
 from io import BytesIO
 import time
 
@@ -9,23 +8,23 @@ import time
 st.title('Opera Cloud PMS Data Checking Tool')
 
 # Input fields
-hostname = st.text_input('Hostname')
-x_app_key = st.text_input('X-App-Key')
-client_id = st.text_input('Client ID')
-client_secret = st.text_input('Client Secret', type='password')
-username = st.text_input('Username')
-password = st.text_input('Password', type='password')
-ext_system_code = st.text_input('External System Code')
-hotel_id = st.text_input('Hotel ID')
-start_date = st.date_input('Start Date')
-end_date = st.date_input('End Date')
+hostname = st.text_input('Hostname', 'Enter the API Hostname')
+x_app_key = st.text_input('X-App-Key', 'Enter the x-app-key specific to the hotel')
+client_id = st.text_input('Client ID', 'Enter the Client ID for Basic Auth')
+client_secret = st.text_input('Client Secret', 'Enter the Client Secret for Basic Auth', type='password')
+username = st.text_input('Username', 'Enter your username for authentication')
+password = st.text_input('Password', 'Enter your password for authentication', type='password')
+ext_system_code = st.text_input('External System Code', 'Enter the External System Code')
+hotel_id = st.text_input('Hotel ID', 'Enter the Hotel ID')
+start_date = st.date_input('Start Date', help='Select the start date for the report')
+end_date = st.date_input('End Date', help='Select the end date for the report')
 
 def authenticate():
     url = f"{hostname}/oauth/v1/tokens"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'x-app-key': x_app_key,
-        'Authorization': 'Basic ' + requests.auth._basic_auth_str(client_id, client_secret),
+        'Authorization': f'Basic {requests.auth._basic_auth_str(client_id, client_secret)}',
     }
     data = {
         'username': username,
@@ -54,7 +53,7 @@ def start_async_process(token):
     url = f"{hostname}/inv/async/v1/externalSystems/{ext_system_code}/hotels/{hotel_id}/revenueInventoryStatistics"
     response = requests.post(url, json=data, headers=headers)
     if response.status_code == 202:
-        return response.headers.get('Location')
+        return response.headers.get('Location')  # Location (1)
     else:
         st.error(f"Failed to start asynchronous process: {response.status_code} - {response.text}")
         return None
@@ -65,16 +64,15 @@ def wait_for_data_ready(location_url, token):
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
-    retry_interval = 10  # seconds
     while True:
         response = requests.head(location_url, headers=headers)
         if response.status_code == 201:
-            return True
-        elif response.status_code in [202, 404]:  # Continue retrying if processing or not found
-            time.sleep(retry_interval)
+            return response.headers.get('Location')  # Location (2) for GET request
+        elif response.status_code in [202, 404]:
+            time.sleep(10)  # Retry every 10 seconds
         else:
             st.error(f"Error checking data readiness: {response.status_code} - {response.reason}")
-            return False
+            return None
 
 def retrieve_data(location_url, token):
     headers = {
@@ -100,8 +98,10 @@ def data_to_excel(data):
 if st.button('Retrieve Data'):
     token = authenticate()
     if token:
-        location_url = start_async_process(token)
-        if location_url and wait_for_data_ready(location_url, token):
-            data = retrieve_data(location_url, token)
-            if data:
-                data_to_excel(data)
+        initial_location_url = start_async_process(token)
+        if initial_location_url:
+            final_location_url = wait_for_data_ready(initial_location_url, token)
+            if final_location_url:
+                data = retrieve_data(final_location_url, token)
+                if data:
+                    data_to_excel(data)
