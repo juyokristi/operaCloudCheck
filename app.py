@@ -36,7 +36,7 @@ def authenticate():
     if response.status_code == 200:
         return response.json().get('access_token')
     else:
-        st.error(f'Authentication failed: {response.status_code} - {response.reason}')
+        st.error(f'Authentication failed: {response.status_code} - {response.text}')
         return None
 
 def async_data_request(token):
@@ -56,7 +56,7 @@ def async_data_request(token):
     if post_response.status_code == 202:
         return post_response.headers.get('Location')
     else:
-        st.error(f"Failed to initiate data retrieval: {post_response.status_code} - {post_response.reason}")
+        st.error(f"Failed to initiate data retrieval: {post_response.status_code} - {post_response.text}")
         return None
 
 def check_async_status(location_url, token):
@@ -65,20 +65,15 @@ def check_async_status(location_url, token):
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
-    # Attempt to check the status for a maximum of 10 minutes
-    timeout = time.time() + 60*10  # 10 minutes from now
     while True:
-        if time.time() > timeout:
-            st.error("Timeout reached while checking data retrieval status.")
-            return None
         head_response = requests.head(location_url, headers=headers)
         if head_response.status_code == 201:
-            return location_url  # Data ready for retrieval
+            return True  # Data ready for retrieval
         elif head_response.status_code in [202, 404]:  # Still processing or not found yet
             time.sleep(10)  # Wait for 10 seconds before retrying
         else:
             st.error(f"Error checking data retrieval status: {head_response.status_code} - {head_response.reason}")
-            return None
+            return False
 
 def get_data(location_url, token):
     headers = {
@@ -109,8 +104,7 @@ if st.button('Retrieve Data'):
     if token:
         location_url = async_data_request(token)
         if location_url:
-            final_location_url = check_async_status(location_url, token)
-            if final_location_url:
-                data = get_data(final_location_url, token)
+            if check_async_status(location_url, token):
+                data = get_data(location_url, token)
                 if data:
                     data_to_excel(data)
