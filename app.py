@@ -1,18 +1,69 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime
 from io import BytesIO
 import json
 import time
 
-# Function definitions
-def authenticate(hostname, x_app_key, client_id, client_secret, username, password):
+# Define placeholder JSON for user guidance
+placeholder_json = '''
+{
+  "authentication": {
+    "xapikey": "replace_with_your_xapikey",
+    "clientId": "replace_with_your_clientId",
+    "hostname": "replace_with_your_hostname",
+    "password": "replace_with_your_password",
+    "username": "replace_with_your_username",
+    "clientSecret": "replace_with_your_clientSecret",
+    "externalSystemId": "replace_with_your_externalSystemId"
+  }
+}
+'''
+
+# Streamlit app layout
+st.title('Opera Cloud PMS Data Checking Tool')
+
+# Text area for JSON configuration input
+json_config = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json)
+
+# Layout
+col1, col2 = st.columns(2)
+
+with col1:
+    if json_config:
+        # Parsing JSON from the user's input
+        config_data = json.loads(json_config)
+        authentication = config_data['authentication']
+        x_app_key = authentication['xapikey']
+        client_id = authentication['clientId']
+        hostname = authentication['hostname']
+        password = authentication['password']
+        username = authentication['username']
+        client_secret = authentication['clientSecret']
+        ext_system_code = authentication['externalSystemId']
+
+    else:
+        x_app_key = st.text_input('X-App-Key', 'Enter your x-app-key')
+        client_id = st.text_input('Client ID', 'Enter your client ID')
+        hostname = st.text_input('Hostname', 'Enter your hostname')
+        password = st.text_input('Password', 'Enter your password', type='password')
+        username = st.text_input('Username', 'Enter your username')
+        client_secret = st.text_input('Client Secret', 'Enter your client secret', type='password')
+        ext_system_code = st.text_input('External System Code', 'Enter your external system code')
+
+with col2:
+    hotel_id = st.text_input('Hotel ID', 'Enter the Hotel ID')
+    start_date = st.date_input('Start Date')
+    end_date = st.date_input('End Date')
+    retrieve_button = st.button('Retrieve Data', key='retrieve')
+
+# Function to authenticate and get token
+def authenticate():
     url = f"{hostname}/oauth/v1/tokens"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'x-app-key': x_app_key,
-        'Authorization': 'Basic ' + requests.auth._basic_auth_str(client_id, client_secret),
+        'Authorization': f'Basic {client_id}:{client_secret}'
     }
     data = {
         'username': username,
@@ -21,11 +72,12 @@ def authenticate(hostname, x_app_key, client_id, client_secret, username, passwo
     }
     response = requests.post(url, headers=headers, data=data)
     if response.status_code == 200:
-        return response.json().get('access_token')
+        return response.json()['access_token']
     else:
-        st.error(f'Authentication failed: {response.status_code} - {response.text}')
+        st.error('Authentication failed.')
         return None
 
+# Function to start async process
 def start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date):
     headers = {
         'Content-Type': 'application/json',
@@ -46,6 +98,7 @@ def start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s
         st.error(f"Failed to start asynchronous process: {response.status_code} - {response.text}")
         return None
 
+# Function to wait for data ready
 def wait_for_data_ready(location_url, token, x_app_key, hotel_id):
     headers = {
         'Authorization': f'Bearer {token}',
@@ -62,6 +115,7 @@ def wait_for_data_ready(location_url, token, x_app_key, hotel_id):
             st.error(f"Error checking data readiness: {response.status_code} - {response.reason}")
             return None
 
+# Function to retrieve data
 def retrieve_data(location_url, token, x_app_key, hotel_id):
     headers = {
         'Authorization': f'Bearer {token}',
@@ -75,6 +129,7 @@ def retrieve_data(location_url, token, x_app_key, hotel_id):
         st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
 
+# Function to download data as an Excel file
 def data_to_excel(data, hotel_id, start_date, end_date):
     df = pd.json_normalize(data, 'revInvStats')
     excel_file = BytesIO()
@@ -85,93 +140,17 @@ def data_to_excel(data, hotel_id, start_date, end_date):
     st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
     st.success("Your report is ready!")
 
-# Placeholder JSON with random values
-placeholder_json = '''
-{
-  "authentication": {
-    "xapikey": "your_xapikey",
-    "clientId": "your_clientId",
-    "hostname": "your_hostname",
-    "password": "your_password",
-    "username": "your_username",
-    "chainCode": "your_chainCode",
-    "clientSecret": "your_clientSecret",
-    "externalSystemId": "your_externalSystemId"
-  }
-}
-'''
+# Data retrieval process
+if retrieve_button and json_config:
+    token = authenticate()
+    if token:
+        initial_location_url = start_async_process(token)
+        if initial_location_url:
+            final_location_url = wait_for_data_ready(initial_location_url, token)
+            if final_location_url:
+                data = retrieve_data(final_location_url, token)
+                if data:
+                    data_to_excel(data, hotel_id, start_date, end_date)
 
-# Function to parse JSON and automatically populate configuration
-def parse_json_and_populate(json_str):
-    try:
-        config = json.loads(json_str)
-        auth = config.get('authentication', {})
-        return {
-            "x_app_key": auth.get("xapikey"),
-            "client_id": auth.get("clientId"),
-            "hostname": auth.get("hostname"),
-            "password": auth.get("password"),
-            "username": auth.get("username"),
-            "client_secret": auth.get("clientSecret"),
-            "ext_system_code": auth.get("externalSystemId")
-        }
-    except json.JSONDecodeError:
-        st.error("Error parsing JSON. Please check the format.")
-        return None
-
-# UI Enhancements
-st.title('Opera Cloud PMS Data Checking Tool')
-
-# Text area for JSON configuration input
-user_json = st.text_area("Paste your configuration JSON here:", value='', placeholder=placeholder_json, height=300)
-
-# Parse JSON and populate configuration if available
-if user_json:
-    config = parse_json_and_populate(user_json)
-else:
-    config = {}
-
-# Splitting the layout into two columns
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    # Displaying parsed configuration
-    st.write("## Configuration (Automatically Populated)")
-    if config:
-        hostname = config["hostname"]
-        x_app_key = config["x_app_key"]
-        client_id = config["client_id"]
-        client_secret = config["client_secret"]
-        username = config["username"]
-        password = config["password"]
-        ext_system_code = config["ext_system_code"]
-        st.json(config)
-    else:
-        st.write("Configuration details will appear here after you paste and parse a valid JSON.")
-
-with col2:
-    # Inputs for column 2: enhanced "cooler" UI for action items
-    st.write("## Retrieve Data")
-    hotel_id = st.text_input('Hotel ID', key="hotel_id", help="Enter the Hotel ID")
-    start_date = st.date_input('Start Date', key="start_date")
-    end_date = st.date_input('End Date', key="end_date")
-    if st.button('Retrieve Data', key="retrieve", help="Click to retrieve data", on_click=None):
-        # Assume functions are defined to use these variables effectively in the data retrieval process
-        st.success("Data retrieval initiated...")
-
-# Example of making the right-hand side cooler: Custom styling (Streamlit allows some level of customization through markdown and CSS)
-st.markdown("""
-<style>
-.stTextInput>div>div>input {
-    color: blue;
-}
-.st-bb {
-    background-color: rgba(30, 130, 230, 0.1);
-}
-.st-at {
-    background-color: rgba(30, 130, 230, 0.1);
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Note: Integration of actual data retrieval functions is omitted for brevity. Implement as per the logic provided earlier.
+# Ensure proper spacing and layout of the app
+st.markdown("<br>", unsafe_allow_html=True)
