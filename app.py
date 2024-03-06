@@ -5,10 +5,10 @@ from datetime import datetime
 from io import BytesIO
 import time
 
-# Streamlit UI setup
+# UI setup
 st.title('Opera Cloud PMS Data Checking Tool')
 
-# Input fields for user to fill
+# Inputs
 hostname = st.text_input('Hostname', help='Enter the API Hostname.')
 x_app_key = st.text_input('X-App-Key', help='Enter the x-app-key specific to the hotel.')
 client_id = st.text_input('Client ID', help='Enter the Client ID for Basic Auth.')
@@ -39,7 +39,7 @@ def authenticate():
         st.error(f'Authentication failed: {response.status_code} - {response.text}')
         return None
 
-def async_data_request(token):
+def start_async_process(token):
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {token}',
@@ -52,30 +52,31 @@ def async_data_request(token):
         "roomTypes": [""]
     }
     url = f"{hostname}/inv/async/v1/externalSystems/{ext_system_code}/hotels/{hotel_id}/revenueInventoryStatistics"
-    post_response = requests.post(url, json=data, headers=headers)
-    if post_response.status_code == 202:
-        return post_response.headers.get('Location')
+    response = requests.post(url, json=data, headers=headers)
+    if response.status_code == 202:
+        return response.headers.get('Location')
     else:
-        st.error(f"Failed to initiate data retrieval: {post_response.status_code} - {post_response.text}")
+        st.error(f"Failed to start asynchronous process: {response.status_code} - {response.text}")
         return None
 
-def check_async_status(location_url, token):
+def wait_for_data_ready(initial_location_url, token):
     headers = {
         'Authorization': f'Bearer {token}',
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
+    current_location_url = initial_location_url
     while True:
-        head_response = requests.head(location_url, headers=headers)
-        if head_response.status_code == 201:
-            return True  # Data ready for retrieval
-        elif head_response.status_code in [202, 404]:  # Still processing or not found yet
-            time.sleep(10)  # Wait for 10 seconds before retrying
+        response = requests.head(current_location_url, headers=headers)
+        if response.status_code == 201:
+            return current_location_url  # Use the current URL for the GET request
+        elif response.status_code in [202, 404]:
+            time.sleep(10)  # Retry every 10 seconds
         else:
-            st.error(f"Error checking data retrieval status: {head_response.status_code} - {head_response.reason}")
-            return False
+            st.error(f"Waiting for data failed: {response.status_code} - {response.reason}")
+            return None
 
-def get_data(location_url, token):
+def retrieve_data(location_url, token):
     headers = {
         'Authorization': f'Bearer {token}',
         'x-app-key': x_app_key,
@@ -94,17 +95,15 @@ def data_to_excel(data):
     with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False)
     excel_data = excel_file.getvalue()
-    st.markdown("""
-    **Note:** This report will download the data as of this moment. Discrepancies may arise if the data is updated.
-    """, unsafe_allow_html=True)
     st.download_button(label='Download Excel file', data=excel_data, file_name='report.xlsx', mime='application/vnd.ms-excel')
 
 if st.button('Retrieve Data'):
     token = authenticate()
     if token:
-        location_url = async_data_request(token)
-        if location_url:
-            if check_async_status(location_url, token):
-                data = get_data(location_url, token)
+        initial_location_url = start_async_process(token)
+        if initial_location_url:
+            final_location_url = wait_for_data_ready(initial_location_url, token)
+            if final_location_url:
+                data = retrieve_data(final_location_url, token)
                 if data:
                     data_to_excel(data)
