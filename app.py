@@ -75,11 +75,10 @@ def check_async_status(location_url, token):
             return None
         head_response = requests.head(location_url, headers=headers)
         if head_response.status_code == 201:
-            return location_url  # Data is ready
-        elif head_response.status_code in (202, 404):  # Accepted (still processing) or Not Found (data might not be ready yet)
-            time.sleep(10)  # Wait 10 seconds before retrying
+            return location_url  # Data ready for retrieval
+        elif head_response.status_code in [202, 404]:  # 202: Accepted, still processing. 404: Not found, yet to be ready.
+            time.sleep(10)  # Wait for 10 seconds before retrying
         else:
-            # Handle other unexpected HTTP status codes
             st.error(f"Error checking data retrieval status: {head_response.status_code} - {head_response.reason}")
             return None
 
