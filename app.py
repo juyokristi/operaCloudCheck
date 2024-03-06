@@ -8,17 +8,17 @@ import time
 # UI setup
 st.title('Opera Cloud PMS Data Checking Tool')
 
-# Inputs
-hostname = st.text_input('Hostname', help='Enter the API Hostname.')
-x_app_key = st.text_input('X-App-Key', help='Enter the x-app-key specific to the hotel.')
-client_id = st.text_input('Client ID', help='Enter the Client ID for Basic Auth.')
-client_secret = st.text_input('Client Secret', help='Enter the Client Secret for Basic Auth.', type='password')
-username = st.text_input('Username', help='Enter your username for authentication.')
-password = st.text_input('Password', help='Enter your password for authentication.', type='password')
-ext_system_code = st.text_input('External System Code', help='Enter the External System Code.')
-hotel_id = st.text_input('Hotel ID', help='Enter the Hotel ID.')
-start_date = st.date_input('Start Date', help='Select the start date for the report.')
-end_date = st.date_input('End Date', help='Select the end date for the report.')
+# Input fields
+hostname = st.text_input('Hostname')
+x_app_key = st.text_input('X-App-Key')
+client_id = st.text_input('Client ID')
+client_secret = st.text_input('Client Secret', type='password')
+username = st.text_input('Username')
+password = st.text_input('Password', type='password')
+ext_system_code = st.text_input('External System Code')
+hotel_id = st.text_input('Hotel ID')
+start_date = st.date_input('Start Date')
+end_date = st.date_input('End Date')
 
 def authenticate():
     url = f"{hostname}/oauth/v1/tokens"
@@ -59,22 +59,22 @@ def start_async_process(token):
         st.error(f"Failed to start asynchronous process: {response.status_code} - {response.text}")
         return None
 
-def wait_for_data_ready(initial_location_url, token):
+def wait_for_data_ready(location_url, token):
     headers = {
         'Authorization': f'Bearer {token}',
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
-    current_location_url = initial_location_url
+    retry_interval = 10  # seconds
     while True:
-        response = requests.head(current_location_url, headers=headers)
+        response = requests.head(location_url, headers=headers)
         if response.status_code == 201:
-            return current_location_url  # Use the current URL for the GET request
-        elif response.status_code in [202, 404]:
-            time.sleep(10)  # Retry every 10 seconds
+            return True
+        elif response.status_code in [202, 404]:  # Continue retrying if processing or not found
+            time.sleep(retry_interval)
         else:
-            st.error(f"Waiting for data failed: {response.status_code} - {response.reason}")
-            return None
+            st.error(f"Error checking data readiness: {response.status_code} - {response.reason}")
+            return False
 
 def retrieve_data(location_url, token):
     headers = {
@@ -82,21 +82,12 @@ def retrieve_data(location_url, token):
         'x-app-key': x_app_key,
         'x-hotelId': hotel_id
     }
-    retry_delay = 10  # seconds
-    max_retries = 5
-    for attempt in range(max_retries):
-        response = requests.get(location_url, headers=headers)
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 404:
-            st.warning(f"Data not found, retrying in {retry_delay} seconds (Attempt {attempt+1}/{max_retries})...")
-            time.sleep(retry_delay)
-        else:
-            st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
-            return None
-    st.error("Data retrieval failed after multiple retries.")
-    return None
-
+    response = requests.get(location_url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
+        return None
 
 def data_to_excel(data):
     df = pd.json_normalize(data, 'revInvStats')
@@ -109,10 +100,8 @@ def data_to_excel(data):
 if st.button('Retrieve Data'):
     token = authenticate()
     if token:
-        initial_location_url = start_async_process(token)
-        if initial_location_url:
-            final_location_url = wait_for_data_ready(initial_location_url, token)
-            if final_location_url:
-                data = retrieve_data(final_location_url, token)
-                if data:
-                    data_to_excel(data)
+        location_url = start_async_process(token)
+        if location_url and wait_for_data_ready(location_url, token):
+            data = retrieve_data(location_url, token)
+            if data:
+                data_to_excel(data)
