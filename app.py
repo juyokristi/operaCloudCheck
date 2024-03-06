@@ -8,7 +8,7 @@ import time
 # Streamlit UI setup
 st.title('Opera Cloud PMS Data Checking Tool')
 
-# Input fields
+# Input fields for user to fill
 hostname = st.text_input('Hostname', help='Enter the API Hostname.')
 x_app_key = st.text_input('X-App-Key', help='Enter the x-app-key specific to the hotel.')
 client_id = st.text_input('Client ID', help='Enter the Client ID for Basic Auth.')
@@ -20,13 +20,12 @@ hotel_id = st.text_input('Hotel ID', help='Enter the Hotel ID.')
 start_date = st.date_input('Start Date', help='Select the start date for the report.')
 end_date = st.date_input('End Date', help='Select the end date for the report.')
 
-# Function definitions
 def authenticate():
     url = f"{hostname}/oauth/v1/tokens"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'x-app-key': x_app_key,
-        'Authorization': f'Basic {client_id}:{client_secret}',
+        'Authorization': 'Basic ' + requests.auth._basic_auth_str(client_id, client_secret),
     }
     data = {
         'username': username,
@@ -55,8 +54,7 @@ def async_data_request(token):
     url = f"{hostname}/inv/async/v1/externalSystems/{ext_system_code}/hotels/{hotel_id}/revenueInventoryStatistics"
     post_response = requests.post(url, json=data, headers=headers)
     if post_response.status_code == 202:
-        location_url = post_response.headers.get('Location')
-        return location_url
+        return post_response.headers.get('Location')
     else:
         st.error(f"Failed to initiate data retrieval: {post_response.status_code} - {post_response.reason}")
         return None
@@ -76,7 +74,7 @@ def check_async_status(location_url, token):
         head_response = requests.head(location_url, headers=headers)
         if head_response.status_code == 201:
             return location_url  # Data ready for retrieval
-        elif head_response.status_code in [202, 404]:  # 202: Accepted, still processing. 404: Not found, yet to be ready.
+        elif head_response.status_code in [202, 404]:  # Still processing or not found yet
             time.sleep(10)  # Wait for 10 seconds before retrying
         else:
             st.error(f"Error checking data retrieval status: {head_response.status_code} - {head_response.reason}")
@@ -106,7 +104,6 @@ def data_to_excel(data):
     """, unsafe_allow_html=True)
     st.download_button(label='Download Excel file', data=excel_data, file_name='report.xlsx', mime='application/vnd.ms-excel')
 
-# Main app logic
 if st.button('Retrieve Data'):
     token = authenticate()
     if token:
