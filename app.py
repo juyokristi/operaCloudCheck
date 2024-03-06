@@ -1,13 +1,39 @@
 import streamlit as st
 import requests
 import pandas as pd
+from datetime import datetime
 from io import BytesIO
 import json
 import time
 
+st.set_page_config(page_title='Opera Cloud PMS Data Checking Tool', layout='wide')
+
+# CSS styles
+st.markdown("""
+<style>
+    .stTextInput>div>div>input {
+        color: #0e1117;
+    }
+    .stDateInput>div>div>input {
+        color: #0e1117;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 0.25rem;
+        font-size: 1rem;
+        font-weight: bold;
+    }
+    .st-bv {
+        font-size: 1rem;
+    }
+    .st-bj {
+        font-size: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Define placeholder JSON for user guidance
-placeholder_json = '''
-{
+placeholder_json = {
   "authentication": {
     "xapikey": "replace_with_your_xapikey",
     "clientId": "replace_with_your_clientId",
@@ -18,52 +44,56 @@ placeholder_json = '''
     "externalSystemId": "replace_with_your_externalSystemId"
   }
 }
-'''
 
 # Streamlit app layout
 st.title('Opera Cloud PMS Data Checking Tool')
 
 # Text area for JSON configuration input
-json_config = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json)
+json_config = st.text_area("Paste your configuration JSON here:", placeholder=json.dumps(placeholder_json, indent=2))
 
 # Layout
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 2])
 
 with col1:
+    st.subheader('Configuration')
     if json_config:
-        # Parsing JSON from the user's input
-        config_data = json.loads(json_config)
-        authentication = config_data['authentication']
-        x_app_key = authentication['xapikey']
-        client_id = authentication['clientId']
-        hostname = authentication['hostname']
-        password = authentication['password']
-        username = authentication['username']
-        client_secret = authentication['clientSecret']
-        ext_system_code = authentication['externalSystemId']
-
+        try:
+            # Parsing JSON from the user's input
+            config_data = json.loads(json_config)
+            authentication = config_data['authentication']
+            x_app_key = authentication['xapikey']
+            client_id = authentication['clientId']
+            hostname = authentication['hostname']
+            password = authentication['password']
+            username = authentication['username']
+            client_secret = authentication['clientSecret']
+            ext_system_code = authentication['externalSystemId']
+        except json.JSONDecodeError:
+            st.error("JSON format error.")
     else:
-        x_app_key = st.text_input('X-App-Key', 'Enter your x-app-key')
-        client_id = st.text_input('Client ID', 'Enter your client ID')
-        hostname = st.text_input('Hostname', 'Enter your hostname')
-        password = st.text_input('Password', 'Enter your password', type='password')
-        username = st.text_input('Username', 'Enter your username')
-        client_secret = st.text_input('Client Secret', 'Enter your client secret', type='password')
-        ext_system_code = st.text_input('External System Code', 'Enter your external system code')
+        # Manual input if no JSON configuration is provided
+        x_app_key = st.text_input('X-App-Key')
+        client_id = st.text_input('Client ID')
+        hostname = st.text_input('Hostname')
+        password = st.text_input('Password', type='password')
+        username = st.text_input('Username')
+        client_secret = st.text_input('Client Secret', type='password')
+        ext_system_code = st.text_input('External System Code')
 
 with col2:
-    hotel_id = st.text_input('Hotel ID', 'Enter the Hotel ID')
-    start_date = st.date_input('Start Date')
-    end_date = st.date_input('End Date')
-    retrieve_button = st.button('Retrieve Data', key='retrieve')
+    st.subheader('Retrieve Data')
+    hotel_id = st.text_input('Hotel ID', key="hotel_id")
+    start_date = st.date_input('Start Date', key="start_date")
+    end_date = st.date_input('End Date', key="end_date")
+    retrieve_button = st.button('Retrieve Data')
 
-# Function to authenticate and get token
+# Authentication function
 def authenticate():
     url = f"{hostname}/oauth/v1/tokens"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'x-app-key': x_app_key,
-        'Authorization': f'Basic {client_id}:{client_secret}'
+        'Authorization': f'Basic {requests.auth._basic_auth_str(client_id, client_secret)}',
     }
     data = {
         'username': username,
@@ -142,15 +172,18 @@ def data_to_excel(data, hotel_id, start_date, end_date):
 
 # Data retrieval process
 if retrieve_button and json_config:
-    token = authenticate()
-    if token:
-        initial_location_url = start_async_process(token)
-        if initial_location_url:
-            final_location_url = wait_for_data_ready(initial_location_url, token)
-            if final_location_url:
-                data = retrieve_data(final_location_url, token)
-                if data:
-                    data_to_excel(data, hotel_id, start_date, end_date)
-
-# Ensure proper spacing and layout of the app
-st.markdown("<br>", unsafe_allow_html=True)
+    with st.spinner('Processing... Please wait.'):
+        # Authentication
+        token = authenticate()
+        if token:
+            # Start async process
+            initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date)
+            if initial_location_url:
+                # Wait for data ready
+                final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
+                if final_location_url:
+                    # Retrieve data
+                    data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
+                    if data:
+                        # Download data as an Excel file
+                        data_to_excel(data, hotel_id, start_date, end_date)
