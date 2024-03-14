@@ -120,7 +120,7 @@ def wait_for_data_ready(location_url, token, x_key, h_id):
         response = requests.head(location_url, headers=headers)
         if response.status_code == 201:
             return response.headers.get('Location')  # Location (2) for GET request
-        elif response.status_code in [202, 404]:
+        elif response.status_code in [200, 202, 404]:
             time.sleep(10)  # Retry every 10 seconds
         else:
             st.error(f"Error checking data readiness: {response.status_code} - {response.reason}")
