@@ -27,6 +27,33 @@ st.title('Opera Cloud PMS Data Checking and Comparison Tool')
 json_config = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
 submit_json = st.button('Submit JSON')
 
+if submit_json:
+    # JSON parsing and authentication code
+    if not json_config.strip().startswith('{'):
+        json_config = '{' + json_config + '}'
+    try:
+        config_data = json.loads(json_config)
+        st.session_state['config_data'] = config_data
+        st.success("JSON loaded successfully!")
+    except json.JSONDecodeError:
+        st.error("Invalid JSON format. Please correct it and try again.")
+
+# Display authentication inputs
+auth_data = st.session_state.get('config_data', {}).get('authentication', {})
+x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
+client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
+hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
+password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
+username = st.text_input('Username', value=auth_data.get('username', ''))
+client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
+ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
+
+hotel_id = st.text_input('Hotel ID', key="hotel_id")
+start_date = st.date_input('Start Date', key="start_date")
+end_date = st.date_input('End Date', key="end_date")
+
+retrieve_button = st.button('Retrieve Data', key='retrieve')
+
 def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
     headers = {
