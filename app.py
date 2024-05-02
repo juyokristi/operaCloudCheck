@@ -175,24 +175,36 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
 
-# Assuming all_data is loaded from the retrieval button section
 compare_button = st.button("Compare Data")
 if compare_button and 'juyo_data' in locals():
-    if 'all_data' in locals() and all_data:
-        hf_data = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
-        hf_data['occupancyDate'] = hf_data['occupancyDate'].astype(str)  # Ensure it's string for comparison
+    with st.spinner('Processing... Please wait.'):
+        token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
+        if token:
+            date_ranges = split_date_range(start_date, end_date)
+            all_data = []
+            for s_date, e_date in date_ranges:
+                initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s_date, e_date)
+                if initial_location_url:
+                    final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
+                    if final_location_url:
+                        data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
+                        if data:
+                            all_data.append(data)
 
-        # Merging data on date
-        merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
-        #discrepancies = merged_data[(merged_data['rn'] - merged_data['roomsSold'] != 0) | (merged_data['revNet'] - merged_data['roomRevenue'] != 0)]
-        st.subheader("Discrepancy Check")
-        st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet']])
-    
-        # Download discrepancies as Excel
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            discrepancies.to_excel(writer, index=False)
-        st.download_button(label="Download Discrepancy Data", data=output.getvalue(), file_name="Discrepancies.xlsx", mime="application/vnd.ms-excel")
+            if all_data:
+                hf_data = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
+                hf_data['occupancyDate'] = hf_data['occupancyDate'].astype(str)  # Ensure it's string for comparison
+
+                # Merging data on date
+                merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
+                st.subheader("Merged Data")
+                st.write(merged_data)
+                
+                # Download merged data as Excel
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    merged_data.to_excel(writer, index=False)
+                st.download_button(label="Download Merged Data", data=output.getvalue(), file_name="Merged_Data.xlsx", mime="application/vnd.ms-excel")
 
 # Calculate and display stats
 total_days = len(merged_data) if 'merged_data' in locals() else 0
