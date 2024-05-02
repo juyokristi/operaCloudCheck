@@ -194,23 +194,23 @@ if compare_button and 'juyo_data' in locals():
             discrepancies.to_excel(writer, index=False)
         st.download_button(label="Download Discrepancy Data", data=output.getvalue(), file_name="Discrepancies.xlsx", mime="application/vnd.ms-excel")
 
-        # Calculate and display stats
-        total_days = len(merged_data)
-        discrepancy_days = len(discrepancies)
-        st.info(f"Discrepancies found on {discrepancy_days} out of {total_days} days.")
+# Calculate and display stats
+total_days = len(merged_data) if 'merged_data' in locals() else 0
+discrepancy_days = len(discrepancies) if 'discrepancies' in locals() else 0
+st.info(f"Discrepancies found on {discrepancy_days} out of {total_days} days.")
         
-        # Split data into past and future
-        today_str = datetime.today().strftime('%Y-%m-%d')
-        past_data = merged_data[merged_data['occupancyDate'] < today_str]
-        future_data = merged_data[merged_data['occupancyDate'] >= today_str]
+# Split data into past and future
+today_str = datetime.today().strftime('%Y-%m-%d')
+past_data = merged_data[merged_data['occupancyDate'] < today_str] if 'merged_data' in locals() else pd.DataFrame()
+future_data = merged_data[merged_data['occupancyDate'] >= today_str] if 'merged_data' in locals() else pd.DataFrame()
 
-        # Calculate accuracy percentages for past and future
-        past_rn_accuracy = 1 - (abs(past_data['rn'] - past_data['roomsSold']).sum() / past_data['rn'].sum())
-        past_rev_accuracy = 1 - (abs(past_data['revNet'] - past_data['roomRevenue']).sum() / past_data['revNet'].sum())
-        future_rn_accuracy = 1 - (abs(future_data['rn'] - future_data['roomsSold']).sum() / future_data['rn'].sum())
-        future_rev_accuracy = 1 - (abs(future_data['revNet'] - future_data['roomRevenue']).sum() / future_data['revNet'].sum())
+# Calculate accuracy percentages for past and future
+past_rn_accuracy = 1 - (abs(past_data['rn'] - past_data['roomsSold']).sum() / past_data['rn'].sum()) if not past_data.empty else 0
+past_rev_accuracy = 1 - (abs(past_data['revNet'] - past_data['roomRevenue']).sum() / past_data['revNet'].sum()) if not past_data.empty else 0
+future_rn_accuracy = 1 - (abs(future_data['rn'] - future_data['roomsSold']).sum() / future_data['rn'].sum()) if not future_data.empty else 0
+future_rev_accuracy = 1 - (abs(future_data['revNet'] - future_data['roomRevenue']).sum() / future_data['revNet'].sum()) if not future_data.empty else 0
 
-        st.write(f"Past RN accuracy: {past_rn_accuracy:.2%}")
-        st.write(f"Past Rev accuracy: {past_rev_accuracy:.2%}")
-        st.write(f"Future RN accuracy: {future_rn_accuracy:.2%}")
-        st.write(f"Future Rev accuracy: {future_rev_accuracy:.2%}")
+st.write(f"Past RN accuracy: {past_rn_accuracy:.2%}")
+st.write(f"Past Rev accuracy: {past_rev_accuracy:.2%}")
+st.write(f"Future RN accuracy: {future_rn_accuracy:.2%}")
+st.write(f"Future Rev accuracy: {future_rev_accuracy:.2%}")
