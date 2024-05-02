@@ -4,7 +4,7 @@ import pandas as pd
 from io import BytesIO
 import json
 import time
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 # Define placeholder JSON for user guidance
 placeholder_json = '''{
@@ -20,22 +20,18 @@ placeholder_json = '''{
 }'''
 
 # Streamlit app layout
-st.title('Opera Cloud PMS Data Checking Tool')
+st.title('Opera Cloud PMS Data Checking and Comparison Tool')
 
 # JSON configuration input and Submit button
-json_input = st.empty()  # Create an empty placeholder for dynamic layout management
-json_config = json_input.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
+json_config = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
 submit_json = st.button('Submit JSON')
 
-# Process and validate JSON when submitted
 if submit_json:
-    # Auto-add curly braces if missing
     if not json_config.strip().startswith('{'):
         json_config = '{' + json_config + '}'
     try:
-        # Parse the provided JSON
         config_data = json.loads(json_config)
-        st.session_state['config_data'] = config_data  # Store in session state if further processing is needed
+        st.session_state['config_data'] = config_data
         st.success("JSON loaded successfully!")
     except json.JSONDecodeError:
         st.error("Invalid JSON format. Please correct it and try again.")
@@ -44,7 +40,6 @@ if submit_json:
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # Attempt to use session state data if available, otherwise initialize empty
     auth_data = st.session_state.get('config_data', {}).get('authentication', {})
     x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
     client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
@@ -164,3 +159,57 @@ if retrieve_button:
 
             if all_data:
                 data_to_excel(all_data, hotel_id, start_date, end_date)
+
+
+# Upload CSV for comparison
+st.header("Upload CSV File for Comparison")
+uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
+if uploaded_file is not None:
+    juyo_data = pd.read_csv(uploaded_file)
+    juyo_data['arrivalDate'] = juyo_data['arrivalDate'].apply(lambda x: datetime.strptime(x, '%d/%m/%Y').strftime('%Y-%m-%d'))
+    st.success("CSV uploaded and processed!")
+
+# Comparison functionality
+compare_button = st.button("Compare Data")
+if compare_button and 'juyo_data' in locals():
+    # Assuming all_data is loaded from the retrieval button section
+    if 'all_data' in locals() and all_data:
+        hf_data = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
+        hf_data['occupancyDate'] = hf_data['occupancyDate'].astype(str)  # Ensure it's string for comparison
+
+        # Merging data on date
+        merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
+        merged_data['RN Diff'] = merged_data['rn'] - merged_data['roomsSold']
+        merged_data['Rev Diff'] = merged_data['revNet'] - merged_data['roomRevenue']
+
+        # Display discrepancies
+        discrepancies = merged_data[(merged_data['RN Diff'] != 0) | (merged_data['Rev Diff'] != 0)]
+        st.subheader("Discrepancy Check")
+        st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet', 'RN Diff', 'Rev Diff']])
+
+        # Download discrepancies as Excel
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            discrepancies.to_excel(writer, index=False)
+        st.download_button(label="Download Discrepancy Data", data=output.getvalue(), file_name="Discrepancies.xlsx", mime="application/vnd.ms-excel")
+
+# Calculate and display stats
+    total_days = len(merged_data)
+    discrepancy_days = len(discrepancies)
+    st.info(f"Discrepancies found on {discrepancy_days} out of {total_days} days.")
+    
+    # Split data into past and future
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    past_data = merged_data[merged_data['occupancyDate'] < today_str]
+    future_data = merged_data[merged_data['occupancyDate'] >= today_str]
+
+    # Calculate accuracy percentages for past and future
+    past_rn_accuracy = 1 - (abs(past_data['RN Diff']).sum() / past_data['rn'].sum())
+    past_rev_accuracy = 1 - (abs(past_data['Rev Diff']).sum() / past_data['revNet'].sum())
+    future_rn_accuracy = 1 - (abs(future_data['RN Diff']).sum() / future_data['rn'].sum())
+    future_rev_accuracy = 1 - (abs(future_data['Rev Diff']).sum() / future_data['revNet'].sum())
+
+    st.write(f"Past RN accuracy: {past_rn_accuracy:.2%}")
+    st.write(f"Past Rev accuracy: {past_rev_accuracy:.2%}")
+    st.write(f"Future RN accuracy: {future_rn_accuracy:.2%}")
+    st.write(f"Future Rev accuracy: {future_rev_accuracy:.2%}")
