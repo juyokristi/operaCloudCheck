@@ -205,7 +205,22 @@ if compare_button and uploaded_file is not None:
 
                     # Merge dataframes
                     merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
-
+                    
+                    # Select only the desired columns
+                    merged_data = merged_data[['occupancyDate', 'roomsSold_x', 'roomsSold_y', 'revNet_x', 'revNet_y']]
+                    
+                    # Rename columns for clarity
+                    merged_data.rename(columns={
+                        'roomsSold_x': 'RN HF',
+                        'roomsSold_y': 'RN Juyo',
+                        'revNet_x': 'Rev HF',
+                        'revNet_y': 'Rev Juyo'
+                    }, inplace=True)
+                    
+                    # Calculate differences
+                    merged_data['RN Diff'] = merged_data['RN Juyo'] - merged_data['RN HF']
+                    merged_data['Rev Diff'] = merged_data['Rev Juyo'] - merged_data['Rev HF']
+                    
                     st.subheader("Merged Data")
                     st.write(merged_data)
                     
