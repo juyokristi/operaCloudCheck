@@ -155,50 +155,23 @@ def load_csv_data(uploaded_file):
         return None
 
 # Authenticate and retrieve data
-if submit_json:
-    if not json_config.strip().startswith('{'):
-        json_config = '{' + json_config + '}'
-    try:
-        config_data = json.loads(json_config)
-        st.session_state['config_data'] = config_data
-        st.success("JSON loaded successfully!")
+if retrieve_button:
+    with st.spinner('Processing... Please wait.'):
+        token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
+        if token:
+            date_ranges = split_date_range(start_date, end_date)
+            all_data = []
+            for s_date, e_date in date_ranges:
+                initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s_date, e_date)
+                if initial_location_url:
+                    final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
+                    if final_location_url:
+                        data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
+                        if data:
+                            all_data.append(data)
 
-        # Display authentication inputs
-        auth_data = st.session_state['config_data'].get('authentication', {})
-        x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
-        client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
-        hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
-        password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
-        username = st.text_input('Username', value=auth_data.get('username', ''))
-        client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
-        ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
-
-        hotel_id = st.text_input('Hotel ID', key="hotel_id")
-        start_date = st.date_input('Start Date', key="start_date")
-        end_date = st.date_input('End Date', key="end_date")
-
-        retrieve_button = st.button('Retrieve Data', key='retrieve')
-
-        if retrieve_button:
-            with st.spinner('Processing... Please wait.'):
-                token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
-                if token:
-                    date_ranges = split_date_range(start_date, end_date)
-                    all_data = []
-                    for s_date, e_date in date_ranges:
-                        initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s_date, e_date)
-                        if initial_location_url:
-                            final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
-                            if final_location_url:
-                                data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
-                                if data:
-                                    all_data.append(data)
-
-                    if all_data:
-                        data_to_excel(all_data, hotel_id, start_date, end_date)
-
-    except json.JSONDecodeError:
-        st.error("Invalid JSON format. Please correct it and try again.")
+            if all_data:
+                data_to_excel(all_data, hotel_id, start_date, end_date)
 
 # Upload CSV for comparison
 st.header("Upload CSV File for Comparison")
