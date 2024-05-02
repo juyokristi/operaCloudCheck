@@ -22,33 +22,37 @@ placeholder_json = '''{
 # Streamlit app layout
 st.title('Opera Cloud PMS Data Checking Tool')
 
-# Text area for JSON configuration input
-json_config = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
+# JSON configuration input and Submit button
+json_input = st.empty()  # Create an empty placeholder for dynamic layout management
+json_config = json_input.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
+submit_json = st.button('Submit JSON')
 
-# Layout
+# Process and validate JSON when submitted
+if submit_json:
+    # Auto-add curly braces if missing
+    if not json_config.strip().startswith('{'):
+        json_config = '{' + json_config + '}'
+    try:
+        # Parse the provided JSON
+        config_data = json.loads(json_config)
+        st.session_state['config_data'] = config_data  # Store in session state if further processing is needed
+        st.success("JSON loaded successfully!")
+    except json.JSONDecodeError:
+        st.error("Invalid JSON format. Please correct it and try again.")
+
+# Display forms even before JSON input
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    if json_config:
-        try:
-            config_data = json.loads(json_config)
-            authentication = config_data['authentication']
-            x_app_key = st.text_input('X-App-Key', value=authentication.get('xapikey', ''))
-            client_id = st.text_input('Client ID', value=authentication.get('clientId', ''))
-            hostname = st.text_input('Hostname', value=authentication.get('hostname', ''))
-            password = st.text_input('Password', value=authentication.get('password', ''), type='password')
-            username = st.text_input('Username', value=authentication.get('username', ''))
-            client_secret = st.text_input('Client Secret', value=authentication.get('clientSecret', ''), type='password')
-            ext_system_code = st.text_input('External System Code', value=authentication.get('externalSystemId', ''))
-        except json.JSONDecodeError:
-            st.error('JSON format error.')
-            x_app_key = st.text_input('X-App-Key')
-            client_id = st.text_input('Client ID')
-            hostname = st.text_input('Hostname')
-            password = st.text_input('Password', type='password')
-            username = st.text_input('Username')
-            client_secret = st.text_input('Client Secret', type='password')
-            ext_system_code = st.text_input('External System Code')
+    # Attempt to use session state data if available, otherwise initialize empty
+    auth_data = st.session_state.get('config_data', {}).get('authentication', {})
+    x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
+    client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
+    hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
+    password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
+    username = st.text_input('Username', value=auth_data.get('username', ''))
+    client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
+    ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
 
 with col2:
     hotel_id = st.text_input('Hotel ID', key="hotel_id")
