@@ -165,12 +165,10 @@ st.header("Upload CSV File for Comparison")
 uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
 if uploaded_file is not None:
     try:
-        juyo_data = pd.read_csv(uploaded_file)
-        if 'arrivalDate' not in juyo_data.columns:
-            st.error(f"Missing 'arrivalDate' column. Available columns: {list(juyo_data.columns)}")
-        else:
-            juyo_data['arrivalDate'] = juyo_data['arrivalDate'].apply(lambda x: datetime.strptime(x, '%d/%m/%Y').strftime('%Y-%m-%d'))
-            st.success("CSV uploaded and processed!")
+        # Correctly handling the CSV file with semicolon delimiter
+        juyo_data = pd.read_csv(uploaded_file, delimiter=';')
+        juyo_data['arrivalDate'] = juyo_data['arrivalDate'].apply(lambda x: datetime.strptime(x, '%d/%m/%Y').strftime('%Y-%m-%d'))
+        st.success("CSV uploaded and processed!")
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
 
@@ -186,8 +184,7 @@ if compare_button and 'juyo_data' in locals():
         discrepancies = merged_data[(merged_data['rn'] - merged_data['roomsSold'] != 0) | (merged_data['revNet'] - merged_data['roomRevenue'] != 0)]
         st.subheader("Discrepancy Check")
         st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet']])
-
-
+ 
         # Download discrepancies as Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
