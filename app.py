@@ -184,7 +184,7 @@ if compare_button and 'juyo_data' in locals():
 
         # Merging data on date
         merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
-        discrepancies = merged_data[(merged_data['rn'] - merged_data['roomsSold'] != 0) | (merged_data['revNet'] - merged_data['roomRevenue'] != 0)]
+        #discrepancies = merged_data[(merged_data['rn'] - merged_data['roomsSold'] != 0) | (merged_data['revNet'] - merged_data['roomRevenue'] != 0)]
         st.subheader("Discrepancy Check")
         st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet']])
     
