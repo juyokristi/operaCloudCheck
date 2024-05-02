@@ -4,6 +4,7 @@ import pandas as pd
 from io import BytesIO
 import json
 import time
+from datetime import timedelta
 
 # Define placeholder JSON for user guidance
 placeholder_json = '''{
@@ -28,14 +29,10 @@ json_config = st.text_area("Paste your configuration JSON here:", placeholder=pl
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # Parse JSON configuration and display inputs
     if json_config:
         try:
-            # Attempt to load the provided JSON
             config_data = json.loads(json_config)
-            # Retrieve the authentication details
             authentication = config_data['authentication']
-            # Display inputs with prefilled data from JSON
             x_app_key = st.text_input('X-App-Key', value=authentication.get('xapikey', ''))
             client_id = st.text_input('Client ID', value=authentication.get('clientId', ''))
             hostname = st.text_input('Hostname', value=authentication.get('hostname', ''))
@@ -52,23 +49,22 @@ with col1:
             username = st.text_input('Username')
             client_secret = st.text_input('Client Secret', type='password')
             ext_system_code = st.text_input('External System Code')
-    else:
-        x_app_key = st.text_input('X-App-Key')
-        client_id = st.text_input('Client ID')
-        hostname = st.text_input('Hostname')
-        password = st.text_input('Password', type='password')
-        username = st.text_input('Username')
-        client_secret = st.text_input('Client Secret', type='password')
-        ext_system_code = st.text_input('External System Code')
 
 with col2:
-    # Inputs for initiating the data retrieval
     hotel_id = st.text_input('Hotel ID', key="hotel_id")
     start_date = st.date_input('Start Date', key="start_date")
     end_date = st.date_input('End Date', key="end_date")
     retrieve_button = st.button('Retrieve Data', key='retrieve')
 
-# Function to authenticate and get token
+def split_date_range(start_date, end_date, max_days=400):
+    ranges = []
+    current_start_date = start_date
+    while current_start_date < end_date:
+        current_end_date = min(current_start_date + timedelta(days=max_days - 1), end_date)
+        ranges.append((current_start_date, current_end_date))
+        current_start_date = current_end_date + timedelta(days=1)
+    return ranges
+
 def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
     headers = {
@@ -88,7 +84,6 @@ def authenticate(host, x_key, client, secret, user, passw):
         st.error(f'Authentication failed: {response.text}')
         return None
 
-# Function to start async process
 def start_async_process(token, host, x_key, h_id, ext_code, s_date, e_date):
     headers = {
         'Content-Type': 'application/json',
@@ -104,12 +99,11 @@ def start_async_process(token, host, x_key, h_id, ext_code, s_date, e_date):
     url = f"{host}/inv/async/v1/externalSystems/{ext_code}/hotels/{h_id}/revenueInventoryStatistics"
     response = requests.post(url, json=data, headers=headers)
     if response.status_code == 202:
-        return response.headers.get('Location')  # Location (1)
+        return response.headers.get('Location')
     else:
         st.error(f"Failed to start asynchronous process: {response.status_code} - {response.text}")
         return None
 
-# Function to wait for data ready
 def wait_for_data_ready(location_url, token, x_key, h_id):
     headers = {
         'Authorization': f'Bearer {token}',
@@ -119,14 +113,13 @@ def wait_for_data_ready(location_url, token, x_key, h_id):
     while True:
         response = requests.head(location_url, headers=headers)
         if response.status_code == 201:
-            return response.headers.get('Location')  # Location (2) for GET request
+            return response.headers.get('Location')
         elif response.status_code in [200, 202, 404]:
-            time.sleep(10)  # Retry every 10 seconds
+            time.sleep(10)
         else:
             st.error(f"Error checking data readiness: {response.status_code} - {response.reason}")
             return None
 
-# Function to retrieve data
 def retrieve_data(location_url, token, x_key, h_id):
     headers = {
         'Authorization': f'Bearer {token}',
@@ -140,9 +133,8 @@ def retrieve_data(location_url, token, x_key, h_id):
         st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
 
-# Function to download data as an Excel file
-def data_to_excel(data, h_id, s_date, e_date):
-    df = pd.json_normalize(data, 'revInvStats')
+def data_to_excel(all_data, h_id, s_date, e_date):
+    df = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
     excel_file = BytesIO()
     filename = f"statistics_{h_id}_{s_date.strftime('%Y-%m-%d')}_{e_date.strftime('%Y-%m-%d')}.xlsx"
     with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
@@ -151,21 +143,20 @@ def data_to_excel(data, h_id, s_date, e_date):
     st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
     st.success("Your report is ready!")
 
-# Data retrieval process
 if retrieve_button:
-    # Progress bar setup
     with st.spinner('Processing... Please wait.'):
-        # Authentication
         token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
         if token:
-            # Start async process
-            initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date)
-            if initial_location_url:
-                # Wait for data ready
-                final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
-                if final_location_url:
-                    # Retrieve data
-                    data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
-                    if data:
-                        # Download data as an Excel file
-                        data_to_excel(data, hotel_id, start_date, end_date)
+            date_ranges = split_date_range(start_date, end_date)
+            all_data = []
+            for s_date, e_date in date_ranges:
+                initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s_date, e_date)
+                if initial_location_url:
+                    final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
+                    if final_location_url:
+                        data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
+                        if data:
+                            all_data.append(data)
+
+            if all_data:
+                data_to_excel(all_data, hotel_id, start_date, end_date)
