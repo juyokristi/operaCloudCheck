@@ -5,6 +5,7 @@ from io import BytesIO
 import json
 import time
 from datetime import timedelta, datetime
+import csv
 
 # Define placeholder JSON for user guidance
 placeholder_json = '''{
@@ -53,7 +54,7 @@ with col2:
     start_date = st.date_input('Start Date', key="start_date")
     end_date = st.date_input('End Date', key="end_date")
     retrieve_button = st.button('Retrieve Data', key='retrieve')
-
+  
 def split_date_range(start_date, end_date, max_days=400):
     ranges = []
     current_start_date = start_date
@@ -165,9 +166,11 @@ st.header("Upload CSV File for Comparison")
 uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
 if uploaded_file is not None:
     try:
-        # Correctly handling the CSV file with semicolon delimiter
-        juyo_data = pd.read_csv(uploaded_file, delimiter=';')
-        juyo_data['arrivalDate'] = juyo_data['arrivalDate'].apply(lambda x: datetime.strptime(x, '%d/%m/%Y').strftime('%Y-%m-%d'))
+        content = uploaded_file.getvalue().decode("utf-8")
+        sniffer = csv.Sniffer()
+        dialect = sniffer.sniff(content.splitlines()[0])
+        juyo_data = pd.read_csv(uploaded_file, delimiter=dialect.delimiter)
+        juyo_data['arrivalDate'] = pd.to_datetime(juyo_data['arrivalDate'], errors='coerce')
         st.success("CSV uploaded and processed!")
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
@@ -184,7 +187,7 @@ if compare_button and 'juyo_data' in locals():
         discrepancies = merged_data[(merged_data['rn'] - merged_data['roomsSold'] != 0) | (merged_data['revNet'] - merged_data['roomRevenue'] != 0)]
         st.subheader("Discrepancy Check")
         st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet']])
- 
+    
         # Download discrepancies as Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
