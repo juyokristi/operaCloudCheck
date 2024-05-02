@@ -36,7 +36,6 @@ if submit_json:
     except json.JSONDecodeError:
         st.error("Invalid JSON format. Please correct it and try again.")
 
-# Display forms even before JSON input
 col1, col2 = st.columns([2, 1])
 
 with col1:
@@ -165,27 +164,29 @@ if retrieve_button:
 st.header("Upload CSV File for Comparison")
 uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
 if uploaded_file is not None:
-    juyo_data = pd.read_csv(uploaded_file)
-    juyo_data['arrivalDate'] = juyo_data['arrivalDate'].apply(lambda x: datetime.strptime(x, '%d/%m/%Y').strftime('%Y-%m-%d'))
-    st.success("CSV uploaded and processed!")
+    try:
+        juyo_data = pd.read_csv(uploaded_file)
+        if 'arrivalDate' not in juyo_data.columns:
+            st.error(f"Missing 'arrivalDate' column. Available columns: {list(juyo_data.columns)}")
+        else:
+            juyo_data['arrivalDate'] = juyo_data['arrivalDate'].apply(lambda x: datetime.strptime(x, '%d/%m/%Y').strftime('%Y-%m-%d'))
+            st.success("CSV uploaded and processed!")
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
 
-# Comparison functionality
+# Assuming all_data is loaded from the retrieval button section
 compare_button = st.button("Compare Data")
 if compare_button and 'juyo_data' in locals():
-    # Assuming all_data is loaded from the retrieval button section
     if 'all_data' in locals() and all_data:
         hf_data = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
         hf_data['occupancyDate'] = hf_data['occupancyDate'].astype(str)  # Ensure it's string for comparison
 
         # Merging data on date
         merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
-        merged_data['RN Diff'] = merged_data['rn'] - merged_data['roomsSold']
-        merged_data['Rev Diff'] = merged_data['revNet'] - merged_data['roomRevenue']
-
-        # Display discrepancies
-        discrepancies = merged_data[(merged_data['RN Diff'] != 0) | (merged_data['Rev Diff'] != 0)]
+        discrepancies = merged_data[(merged_data['rn'] - merged_data['roomsSold'] != 0) | (merged_data['revNet'] - merged_data['roomRevenue'] != 0)]
         st.subheader("Discrepancy Check")
-        st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet', 'RN Diff', 'Rev Diff']])
+        st.write(discrepancies[['occupancyDate', 'roomsSold', 'roomRevenue', 'rn', 'revNet']])
+
 
         # Download discrepancies as Excel
         output = BytesIO()
