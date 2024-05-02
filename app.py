@@ -200,8 +200,12 @@ if compare_button and uploaded_file is not None:
                     hf_data['occupancyDate'] = hf_data['occupancyDate'].astype(str)  # Ensure it's string for comparison
                     juyo_data['arrivalDate'] = pd.to_datetime(juyo_data['arrivalDate'], errors='coerce')  # Convert to datetime
 
-                    # Merging data on date
+                    # Convert 'occupancyDate' column in hf_data to datetime
+                    hf_data['occupancyDate'] = pd.to_datetime(hf_data['occupancyDate'])
+
+                    # Merge dataframes
                     merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
+
                     st.subheader("Merged Data")
                     st.write(merged_data)
                     
