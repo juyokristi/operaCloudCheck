@@ -21,7 +21,6 @@ placeholder_json = '''{
 
 st.title('Opera Cloud PMS Data Checking Tool')
 
-# Input area for configuration JSON
 json_input = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
 submit_json = st.button('Submit JSON')
 
@@ -36,37 +35,38 @@ if submit_json:
         st.error("Invalid JSON format. Please correct it and try again.")
 
 # Setup authentication and parameters input forms
-auth_data = st.session_state.get('config_data', {}).get('authentication', {})
-x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
-client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
-hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
-password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
-username = st.text_input('Username', value=auth_data.get('username', ''))
-client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
-ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
-hotel_id = st.text_input('Hotel ID')
-start_date = st.date_input('Start Date')
-end_date = st.date_input('End Date')
-retrieve_button = st.button('Retrieve Data')
+if 'config_data' in st.session_state:
+    auth_data = st.session_state['config_data'].get('authentication', {})
+    x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
+    client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
+    hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
+    password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
+    username = st.text_input('Username', value=auth_data.get('username', ''))
+    client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
+    ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
+    hotel_id = st.text_input('Hotel ID')
+    start_date = st.date_input('Start Date')
+    end_date = st.date_input('End Date')
+    retrieve_button = st.button('Retrieve Data')
 
-if retrieve_button:
-    token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
-    if token:
-        all_data = fetch_data(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date)
-        if all_data:
-            data_to_excel(all_data, hotel_id, start_date, end_date)
-            st.session_state['all_data'] = all_data  # Save fetched data for comparison use
+    if retrieve_button:
+        token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
+        if token:
+            all_data = fetch_data(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date)
+            if all_data:
+                excel_data, filename = data_to_excel(all_data, hotel_id, start_date, end_date)
+                st.download_button('Download Excel file', excel_data, file_name=filename, mime='application/vnd.ms-excel')
+                st.session_state['all_data'] = all_data  # Save fetched data for comparison use
 
 # Feature to upload and compare CSV data
 st.subheader("Upload Comparison CSV Data")
 comparison_file = st.file_uploader("Choose a CSV file", type="csv")
-if comparison_file and 'all_data' in st.session_state:
+if comparison_file and 'all_data' in st_session_state:
     comparison_df = pd.read_csv(comparison_file)
-    compare_and_display_results(st.session_state['all_data'], comparison_df)
-else:
-    st.error("No comparison data uploaded or primary data not available.")
+    result_df = compare_and_display_results(st.session_state['all_data'], comparison_df)
+    st.table(result_df)
 
-def authenticate(host, x_key, client, secret, user, passw):
+ddef authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
