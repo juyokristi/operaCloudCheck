@@ -98,14 +98,25 @@ def retrieve_data(location_url, token, x_key, h_id):
         return None
 
 def data_to_excel(all_data, h_id, s_date, e_date):
-    df = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
-    excel_file = BytesIO()
-    filename = f"statistics_{h_id}_{s_date.strftime('%Y-%m-%d')}_{e_date.strftime('%Y-%m-%d')}.xlsx"
-    with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    excel_data = excel_file.getvalue()
-    st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
-    st.success("Your report is ready!")
+    dfs = []
+    for data in all_data:
+        if 'revInvStats' in data:  # Check if the key 'revInvStats' exists in the data
+            df = pd.json_normalize(data['revInvStats'])
+            dfs.append(df)
+        else:
+            st.warning("No 'revInvStats' found in the retrieved data.")
+    if dfs:
+        combined_df = pd.concat(dfs, ignore_index=True)
+        excel_file = BytesIO()
+        filename = f"statistics_{h_id}_{s_date.strftime('%Y-%m-%d')}_{e_date.strftime('%Y-%m-%d')}.xlsx"
+        with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
+            combined_df.to_excel(writer, index=False)
+        excel_data = excel_file.getvalue()
+        st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
+        st.success("Your report is ready!")
+    else:
+        st.error("No data found for Excel export.")
+
 
 # Define the Streamlit interface
 st.title('Opera Cloud PMS Data Checking Tool')
