@@ -92,14 +92,17 @@ def retrieve_data(location_url, token, x_key, h_id):
     }
     response = requests.get(location_url, headers=headers)
     if response.status_code == 200:
-        return response.json()
+        data = response.json()
+        print("Retrieved data:", data)  # Add this line for debugging
+        return data
     else:
         st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
-
+      
 def data_to_excel(all_data, h_id, s_date, e_date):
     dfs = []
     for data in all_data:
+        print("Data:", data)
         if 'revInvStats' in data:  # Check if the key 'revInvStats' exists in the data
             df = pd.json_normalize(data['revInvStats'])
             dfs.append(df)
