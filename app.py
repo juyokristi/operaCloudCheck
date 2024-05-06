@@ -19,7 +19,7 @@ placeholder_json = '''{
   }
 }'''
 
-# Define functions first
+# Define all functions first
 def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
     headers = {
@@ -107,24 +107,24 @@ def data_to_excel(all_data, h_id, s_date, e_date):
     st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
     st.success("Your report is ready!")
 
-# Now define the Streamlit layout and logic
+# Define the Streamlit interface
 st.title('Opera Cloud PMS Data Checking Tool')
 
-json_input = st.empty()
-json_config = json_input.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
+json_input = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
 submit_json = st.button('Submit JSON')
 
 if submit_json:
-    if not json_config.strip().startswith('{'):
-        json_config = '{' + json_config + '}'
+    if not json_input.strip().startswith('{'):
+        json_input = '{' + json_input + '}'
     try:
-        config_data = json.loads(json_config)
+        config_data = json.loads(json_input)
         st.session_state['config_data'] = config_data
         st.success("JSON loaded successfully!")
     except json.JSONDecodeError:
         st.error("Invalid JSON format. Please correct it and try again.")
 
 col1, col2 = st.columns([2, 1])
+
 with col1:
     auth_data = st.session_state.get('config_data', {}).get('authentication', {})
     x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
@@ -139,7 +139,18 @@ with col2:
     hotel_id = st.text_input('Hotel ID', key="hotel_id")
     start_date = st.date_input('Start Date', key="start_date")
     end_date = st.date_input('End Date', key="end_date")
-    retrieve_button = st.button('Retrieve Data', key='retrieve')
+    if st.button('Retrieve Data', key='retrieve'):
+        st.write("Retrieving data...")
+        token = authenticate(...)
+        if token:
+            location_url = start_async_process(...)
+            if location_url:
+                final_location_url = wait_for_data_ready(...)
+                if final_location_url:
+                    all_data = retrieve_data(...)
+                    if all_data:
+                        data_to_excel(all_data, ...)
+                        st.success("Data retrieval and processing complete.")
 
 # Additional feature: Upload and compare CSV data
 st.subheader("Upload and Compare CSV Data")
