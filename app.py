@@ -27,11 +27,6 @@ json_input = st.empty()  # Create an empty placeholder for dynamic layout manage
 json_config = json_input.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
 submit_json = st.button('Submit JSON')
 
-# Button for redirecting to the discrepancy check tool
-redirect_url = "https://operacloudcompare-khzzzldi4kyhu4dujrn6n2.streamlit.app"
-button_code = f"<a href='{redirect_url}' target='_blank'><button style='color: white; background-color: #1E90FF; border: none; padding: 10px 20px; text-align: center; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer;'>Click Here for Discrepancy Check</button></a>"
-st.markdown(button_code, unsafe_allow_html=True)
-
 # Process and validate JSON when submitted
 if submit_json:
     # Auto-add curly braces if missing
