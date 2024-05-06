@@ -19,7 +19,56 @@ placeholder_json = '''{
   }
 }'''
 
-# Define all functions first
+# Streamlit app layout
+st.title('Opera Cloud PMS Data Checking Tool')
+
+# JSON configuration input and Submit button
+json_input = st.empty()  # Create an empty placeholder for dynamic layout management
+json_config = json_input.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
+submit_json = st.button('Submit JSON')
+
+# Process and validate JSON when submitted
+if submit_json:
+    # Auto-add curly braces if missing
+    if not json_config.strip().startswith('{'):
+        json_config = '{' + json_config + '}'
+    try:
+        # Parse the provided JSON
+        config_data = json.loads(json_config)
+        st.session_state['config_data'] = config_data  # Store in session state if further processing is needed
+        st.success("JSON loaded successfully!")
+    except json.JSONDecodeError:
+        st.error("Invalid JSON format. Please correct it and try again.")
+
+# Display forms even before JSON input
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    # Attempt to use session state data if available, otherwise initialize empty
+    auth_data = st.session_state.get('config_data', {}).get('authentication', {})
+    x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
+    client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
+    hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
+    password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
+    username = st.text_input('Username', value=auth_data.get('username', ''))
+    client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
+    ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
+
+with col2:
+    hotel_id = st.text_input('Hotel ID', key="hotel_id")
+    start_date = st.date_input('Start Date', key="start_date")
+    end_date = st.date_input('End Date', key="end_date")
+    retrieve_button = st.button('Retrieve Data', key='retrieve')
+
+def split_date_range(start_date, end_date, max_days=400):
+    ranges = []
+    current_start_date = start_date
+    while current_start_date < end_date:
+        current_end_date = min(current_start_date + timedelta(days=max_days - 1), end_date)
+        ranges.append((current_start_date, current_end_date))
+        current_start_date = current_end_date + timedelta(days=1)
+    return ranges
+
 def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
     headers = {
@@ -38,15 +87,6 @@ def authenticate(host, x_key, client, secret, user, passw):
     else:
         st.error(f'Authentication failed: {response.text}')
         return None
-
-def split_date_range(start_date, end_date, max_days=400):
-    ranges = []
-    current_start_date = start_date
-    while current_start_date < end_date:
-        current_end_date = min(current_start_date + timedelta(days=max_days - 1), end_date)
-        ranges.append((current_start_date, current_end_date))
-        current_start_date = current_end_date + timedelta(days=1)
-    return ranges
 
 def start_async_process(token, host, x_key, h_id, ext_code, s_date, e_date):
     headers = {
@@ -92,110 +132,35 @@ def retrieve_data(location_url, token, x_key, h_id):
     }
     response = requests.get(location_url, headers=headers)
     if response.status_code == 200:
-        try:
-            data = response.json()
-            if isinstance(data, list):
-                # Replace empty date values with 0
-                for entry in data:
-                    for key, value in entry.items():
-                        if isinstance(value, str) and value.strip() == "":
-                            entry[key] = 0
-            elif isinstance(data, dict):
-                # Replace empty date values with 0
-                for key, value in data.items():
-                    if isinstance(value, str) and value.strip() == "":
-                        data[key] = 0
-            print("Retrieved data:", data)  # Add this line for debugging
-            return data
-        except json.JSONDecodeError:
-            st.error("Failed to decode JSON response.")
-            return None
+        return response.json()
     else:
         st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
-    
+
 def data_to_excel(all_data, h_id, s_date, e_date):
-    dfs = []
-    print("All data:", all_data)  # Add this line for debugging
-    for data in all_data:
-        print("Data:", data)  # Add this line for debugging
-        if 'revInvStats' in data:
-            df = pd.json_normalize(data['revInvStats'])
-            dfs.append(df)
-        else:
-            st.warning("No 'revInvStats' found in the retrieved data.")
-    if dfs:
-        combined_df = pd.concat(dfs, ignore_index=True)
-        excel_file = BytesIO()
-        filename = f"statistics_{h_id}_{s_date.strftime('%Y-%m-%d')}_{e_date.strftime('%Y-%m-%d')}.xlsx"
-        with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
-            combined_df.to_excel(writer, index=False)
-        excel_data = excel_file.getvalue()
-        st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
-        st.success("Your report is ready!")
-    else:
-        st.error("No data found for Excel export.")
+    df = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
+    excel_file = BytesIO()
+    filename = f"statistics_{h_id}_{s_date.strftime('%Y-%m-%d')}_{e_date.strftime('%Y-%m-%d')}.xlsx"
+    with pd.ExcelWriter(excel_file, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    excel_data = excel_file.getvalue()
+    st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
+    st.success("Your report is ready!")
 
-
-# Define the Streamlit interface
-st.title('Opera Cloud PMS Data Checking Tool')
-
-json_input = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
-submit_json = st.button('Submit JSON')
-
-if submit_json:
-    if not json_input.strip().startswith('{'):
-        json_input = '{' + json_input + '}'
-    try:
-        config_data = json.loads(json_input)
-        st.session_state['config_data'] = config_data
-        st.success("JSON loaded successfully!")
-    except json.JSONDecodeError:
-        st.error("Invalid JSON format. Please correct it and try again.")
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    auth_data = st.session_state.get('config_data', {}).get('authentication', {})
-    x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
-    client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
-    hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
-    password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
-    username = st.text_input('Username', value=auth_data.get('username', ''))
-    client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
-    ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
-
-with col2:
-    hotel_id = st.text_input('Hotel ID', key="hotel_id")
-    start_date = st.date_input('Start Date', key="start_date")
-    end_date = st.date_input('End Date', key="end_date")
-    if st.button('Retrieve Data', key='retrieve'):
-        st.write("Retrieving data...")
+if retrieve_button:
+    with st.spinner('Processing... Please wait.'):
         token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
         if token:
-            location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date)
-            if location_url:
-                final_location_url = wait_for_data_ready(location_url, token, x_app_key, hotel_id)
-                if final_location_url:
-                    all_data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
-                    if all_data:
-                        data_to_excel(all_data, hotel_id, start_date, end_date)
-                        st.success("Data retrieval and processing complete.")
+            date_ranges = split_date_range(start_date, end_date)
+            all_data = []
+            for s_date, e_date in date_ranges:
+                initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s_date, e_date)
+                if initial_location_url:
+                    final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
+                    if final_location_url:
+                        data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
+                        if data:
+                            all_data.append(data)
 
-# Additional feature: Upload and compare CSV data
-st.subheader("Upload and Compare CSV Data")
-uploaded_file = st.file_uploader("Choose a CSV file for comparison", type=["csv"])
-if uploaded_file is not None:
-    comparison_df = pd.read_csv(uploaded_file)
-    st.write("Comparison CSV loaded successfully!")
-    if 'all_data' in st.session_state:
-        all_data_df = pd.concat([pd.DataFrame(data) for data in st.session_state['all_data']], ignore_index=True)
-        all_data_df['arrivalDate'] = pd.to_datetime(all_data_df['arrivalDate'])
-        comparison_df['occupancyDate'] = pd.to_datetime(comparison_df['occupancyDate'])
-        merged_df = pd.merge(all_data_df, comparison_df, left_on='arrivalDate', right_on='occupancyDate', how='inner', suffixes=('_retrieved', '_comparison'))
-        merged_df['RN_Difference'] = merged_df['roomSold_retrieved'] - merged_df['roomSold_comparison']
-        merged_df['Revenue_Difference'] = merged_df['roomRevenue_retrieved'] - merged_df['roomRevenue_comparison']
-        display_columns = ['arrivalDate', 'roomSold_retrieved', 'roomSold_comparison', 'RN_Difference', 'roomRevenue_retrieved', 'roomRevenue_comparison', 'Revenue_Difference']
-        st.table(merged_df[display_columns])
-    else:
-        st.error("Please retrieve data from the PMS before uploading a comparison file.")
+            if all_data:
+                data_to_excel(all_data, hotel_id, start_date, end_date)
