@@ -173,81 +173,35 @@ if retrieve_button:
             if all_data:
                 data_to_excel(all_data, hotel_id, start_date, end_date)
 
-# Upload CSV for comparison
-st.header("Upload CSV File for Comparison")
-uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
+# Step 1: Upload comparison CSV
+st.subheader("Upload Comparison CSV Data")
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+if uploaded_file is not None:
+    comparison_df = pd.read_csv(uploaded_file)
 
-compare_button = st.button("Compare Data")
-if compare_button and uploaded_file is not None:
-    juyo_data = load_csv_data(uploaded_file)
-    if juyo_data is not None:
-        with st.spinner('Processing... Please wait.'):
-            token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
-            if token:
-                date_ranges = split_date_range(start_date, end_date)
-                all_data = []
-                for s_date, e_date in date_ranges:
-                    initial_location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, s_date, e_date)
-                    if initial_location_url:
-                        final_location_url = wait_for_data_ready(initial_location_url, token, x_app_key, hotel_id)
-                        if final_location_url:
-                            data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
-                            if data:
-                                all_data.append(data)
+    # Step 2: Data Processing
+    # Assuming initial data is already in 'all_data' from previous steps
+    # Convert date formats to align both datasets (assuming 'arrivalDate' in 'YYYY-MM-DD')
+    all_data_df = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
+    all_data_df['arrivalDate'] = pd.to_datetime(all_data_df['arrivalDate'])
+    comparison_df['occupancyDate'] = pd.to_datetime(comparison_df['occupancyDate'], format='%Y-%m-%d')  # Adjust format if needed
 
-                if all_data:
-                    hf_data = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
-                    hf_data['occupancyDate'] = hf_data['occupancyDate'].astype(str)  # Ensure it's string for comparison
-                    juyo_data['arrivalDate'] = pd.to_datetime(juyo_data['arrivalDate'], errors='coerce')  # Convert to datetime
+    # Step 3: Data Comparison
+    # Merging on dates
+    merged_df = pd.merge(all_data_df, comparison_df, left_on='arrivalDate', right_on='occupancyDate', suffixes=('_set1', '_set2'))
+    # Calculating differences
+    merged_df['RN_Difference'] = merged_df['roomSold_set1'] - merged_df['roomSold_set2']
+    merged_df['Revenue_Difference'] = merged_df['roomRevenue_set1'] - merged_df['roomRevenue_set2']
 
-                    # Convert 'occupancyDate' column in hf_data to datetime
-                    hf_data['occupancyDate'] = pd.to_datetime(hf_data['occupancyDate'])
+    # Step 4: Visualization and Metrics Display
+    st.subheader("Comparison Results")
+    # Displaying comparison table
+    display_columns = ['arrivalDate', 'roomSold_set1', 'roomSold_set2', 'RN_Difference', 
+                       'roomRevenue_set1', 'roomRevenue_set2', 'Revenue_Difference']
+    st.table(merged_df[display_columns])
 
-                    # Merge dataframes
-                    merged_data = pd.merge(hf_data, juyo_data, left_on='occupancyDate', right_on='arrivalDate', how='inner')
-                    
-                    # Select only the desired columns
-                    merged_data = merged_data[['occupancyDate', 'roomsSold_x', 'roomsSold_y', 'revNet_x', 'revNet_y']]
-                    
-                    # Rename columns for clarity
-                    merged_data.rename(columns={
-                        'roomsSold_x': 'RN HF',
-                        'roomsSold_y': 'RN Juyo',
-                        'revNet_x': 'Rev HF',
-                        'revNet_y': 'Rev Juyo'
-                    }, inplace=True)
-                    
-                    # Calculate differences
-                    merged_data['RN Diff'] = merged_data['RN Juyo'] - merged_data['RN HF']
-                    merged_data['Rev Diff'] = merged_data['Rev Juyo'] - merged_data['Rev HF']
-                    
-                    st.subheader("Merged Data")
-                    st.write(merged_data)
-                    
-                    # Download merged data as Excel
-                    output = BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        merged_data.to_excel(writer, index=False)
-                    st.download_button(label="Download Merged Data", data=output.getvalue(), file_name="Merged_Data.xlsx", mime="application/vnd.ms-excel")
-
-# Calculate and display stats
-if 'merged_data' in locals():
-    total_days = len(merged_data)
-    discrepancy_days = len(discrepancies)
-    st.info(f"Discrepancies found on {discrepancy_days} out of {total_days} days.")
-
-    # Split data into past and future
-    today_str = datetime.today().strftime('%Y-%m-%d')
-    past_data = merged_data[merged_data['occupancyDate'] < today_str]
-    future_data = merged_data[merged_data['occupancyDate'] >= today_str]
-
-    # Calculate accuracy percentages for past and future
-    past_rn_accuracy = 1 - (abs(past_data['rn'] - past_data['roomsSold']).sum() / past_data['rn'].sum()) if not past_data.empty else 0
-    past_rev_accuracy = 1 - (abs(past_data['revNet'] - past_data['roomRevenue']).sum() / past_data['revNet'].sum()) if not past_data.empty else 0
-    future_rn_accuracy = 1 - (abs(future_data['rn'] - future_data['roomsSold']).sum() / future_data['rn'].sum()) if not future_data.empty else 0
-    future_rev_accuracy = 1 - (abs(future_data['revNet'] - future_data['roomRevenue']).sum() / future_data['revNet'].sum()) if not future_data.empty else 0
-
-    st.write(f"Past RN accuracy: {past_rn_accuracy:.2%}")
-    st.write(f"Past Rev accuracy: {past_rev_accuracy:.2%}")
-    st.write(f"Future RN accuracy: {future_rn_accuracy:.2%}")
-    st.write(f"Future Rev accuracy: {future_rev_accuracy:.2%}")
+    # Additional metrics (e.g., total differences)
+    total_RN_difference = merged_df['RN_Difference'].sum()
+    total_Revenue_difference = merged_df['Revenue_Difference'].sum()
+    st.write(f"Total Room Nights Difference: {total_RN_difference}")
+    st.write(f"Total Room Revenue Difference: {total_Revenue_difference}")
