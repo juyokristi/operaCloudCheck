@@ -93,11 +93,17 @@ def retrieve_data(location_url, token, x_key, h_id):
     response = requests.get(location_url, headers=headers)
     if response.status_code == 200:
         data = response.json()
+        # Replace empty date values with 0
+        for entry in data:
+            for key, value in entry.items():
+                if isinstance(value, str) and value.strip() == "":
+                    entry[key] = 0
         print("Retrieved data:", data)  # Add this line for debugging
         return data
     else:
         st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
+
       
 def data_to_excel(all_data, h_id, s_date, e_date):
     dfs = []
