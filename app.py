@@ -146,6 +146,10 @@ def data_to_excel(all_data, h_id, s_date, e_date):
     excel_data = excel_file.getvalue()
     st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
     st.success("Your report is ready!")
+    # Add a hyperlink styled as a button
+    button_html = f"<a href='https://operacloudcompare-khzzzldi4kyhu4dujrn6n2.streamlit.app' target='_blank'><button style='color: white; background-color: #008CBA; border: none; padding: 10px 20px; text-align: center; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;'>Discrepancy Check Tool</button></a>"
+    st.markdown(button_html, unsafe_allow_html=True)
+
 
 if retrieve_button:
     with st.spinner('Processing... Please wait.'):
