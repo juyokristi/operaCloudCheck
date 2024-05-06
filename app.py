@@ -113,7 +113,6 @@ def retrieve_data(location_url, token, x_key, h_id):
     else:
         st.error(f"Failed to retrieve data: {response.status_code} - {response.reason}")
         return None
-
     
 def data_to_excel(all_data, h_id, s_date, e_date):
     dfs = []
