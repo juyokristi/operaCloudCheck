@@ -20,7 +20,7 @@ placeholder_json = '''{
 }'''
 
 # Streamlit app layout
-st.title('Opera Cloud PMS Data Checking Tool')
+st.title('Opera Cloud H&F Extractor')
 
 # JSON configuration input and Submit button
 json_input = st.empty()  # Create an empty placeholder for dynamic layout management
