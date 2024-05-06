@@ -165,35 +165,39 @@ if retrieve_button:
             if all_data:
                 data_to_excel(all_data, hotel_id, start_date, end_date)
 
-# Step 1: Upload comparison CSV
+# Assume that this part is where `all_data` should be populated
+# Placeholder for where you would normally populate `all_data`
+if 'all_data' not in st.session_state or st.button('Reload Data'):
+    st.session_state['all_data'] = your_function_to_fetch_all_data()  # Define this function as needed
+
+# Upload and process comparison CSV
 st.subheader("Upload Comparison CSV Data")
 uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 if uploaded_file is not None:
     comparison_df = pd.read_csv(uploaded_file)
+    
+    if 'all_data' in st.session_state and st.session_state['all_data'] is not None:
+        all_data = st.session_state['all_data']
+        
+        # Step 2: Data Processing
+        all_data_df = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
+        all_data_df['arrivalDate'] = pd.to_datetime(all_data_df['arrivalDate'])
 
-    # Step 2: Data Processing
-    # Assuming initial data is already in 'all_data' from previous steps
-    # Convert date formats to align both datasets (assuming 'arrivalDate' in 'YYYY-MM-DD')
-    all_data_df = pd.concat([pd.json_normalize(data, 'revInvStats') for data in all_data], ignore_index=True)
-    all_data_df['arrivalDate'] = pd.to_datetime(all_data_df['arrivalDate'])
-    comparison_df['occupancyDate'] = pd.to_datetime(comparison_df['occupancyDate'], format='%Y-%m-%d')  # Adjust format if needed
+        comparison_df['occupancyDate'] = pd.to_datetime(comparison_df['occupancyDate'], format='%Y-%m-%d')  # Adjust format if needed
 
-    # Step 3: Data Comparison
-    # Merging on dates
-    merged_df = pd.merge(all_data_df, comparison_df, left_on='arrivalDate', right_on='occupancyDate', suffixes=('_set1', '_set2'))
-    # Calculating differences
-    merged_df['RN_Difference'] = merged_df['roomSold_set1'] - merged_df['roomSold_set2']
-    merged_df['Revenue_Difference'] = merged_df['roomRevenue_set1'] - merged_df['roomRevenue_set2']
+        # Step 3: Data Comparison
+        merged_df = pd.merge(all_data_df, comparison_df, left_on='arrivalDate', right_on='occupancyDate', suffixes=('_set1', '_set2'))
+        merged_df['RN_Difference'] = merged_df['roomSold_set1'] - merged_df['roomSold_set2']
+        merged_df['Revenue_Difference'] = merged_df['roomRevenue_set1'] - merged_df['roomRevenue_set2']
 
-    # Step 4: Visualization and Metrics Display
-    st.subheader("Comparison Results")
-    # Displaying comparison table
-    display_columns = ['arrivalDate', 'roomSold_set1', 'roomSold_set2', 'RN_Difference', 
-                       'roomRevenue_set1', 'roomRevenue_set2', 'Revenue_Difference']
-    st.table(merged_df[display_columns])
+        # Step 4: Visualization and Metrics Display
+        st.subheader("Comparison Results")
+        display_columns = ['arrivalDate', 'roomSold_set1', 'roomSold_set2', 'RN_Difference', 'roomRevenue_set1', 'roomRevenue_set2', 'Revenue_Difference']
+        st.table(merged_df[display_columns])
 
-    # Additional metrics (e.g., total differences)
-    total_RN_difference = merged_df['RN_Difference'].sum()
-    total_Revenue_difference = merged_df['Revenue_Difference'].sum()
-    st.write(f"Total Room Nights Difference: {total_RN_difference}")
-    st.write(f"Total Room Revenue Difference: {total_Revenue_difference}")
+        total_RN_difference = merged_df['RN_Difference'].sum()
+        total_Revenue_difference = merged_df['Revenue_Difference'].sum()
+        st.write(f"Total Room Nights Difference: {total_RN_difference}")
+        st.write(f"Total Room Revenue Difference: {total_Revenue_difference}")
+    else:
+        st.error("Data for comparison is not loaded. Please upload the main dataset first.")
