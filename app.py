@@ -6,6 +6,19 @@ import json
 import time
 from datetime import timedelta
 
+# Define placeholder JSON for user guidance
+placeholder_json = '''{
+  "authentication": {
+    "xapikey": "replace_with_your_xapikey",
+    "clientId": "replace_with_your_clientId",
+    "hostname": "replace_with_your_hostname",
+    "password": "replace_with_your_password",
+    "username": "replace_with_your_username",
+    "clientSecret": "replace_with_your_clientSecret",
+    "externalSystemId": "replace_with_your_externalSystemId"
+  }
+}'''
+
 # Define functions first
 def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
