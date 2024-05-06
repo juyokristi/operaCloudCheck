@@ -4,8 +4,7 @@ import pandas as pd
 from io import BytesIO
 import json
 import time
-from datetime import timedelta, datetime
-import csv
+from datetime import timedelta
 
 # Define placeholder JSON for user guidance
 placeholder_json = '''{
@@ -21,38 +20,54 @@ placeholder_json = '''{
 }'''
 
 # Streamlit app layout
-st.title('Opera Cloud PMS Data Checking and Comparison Tool')
+st.title('Opera Cloud PMS Data Checking Tool')
 
 # JSON configuration input and Submit button
-json_config = st.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
+json_input = st.empty()  # Create an empty placeholder for dynamic layout management
+json_config = json_input.text_area("Paste your configuration JSON here:", placeholder=placeholder_json, height=100)
 submit_json = st.button('Submit JSON')
 
+# Process and validate JSON when submitted
 if submit_json:
-    # JSON parsing and authentication code
+    # Auto-add curly braces if missing
     if not json_config.strip().startswith('{'):
         json_config = '{' + json_config + '}'
     try:
+        # Parse the provided JSON
         config_data = json.loads(json_config)
-        st.session_state['config_data'] = config_data
+        st.session_state['config_data'] = config_data  # Store in session state if further processing is needed
         st.success("JSON loaded successfully!")
     except json.JSONDecodeError:
         st.error("Invalid JSON format. Please correct it and try again.")
 
-# Display authentication inputs
-auth_data = st.session_state.get('config_data', {}).get('authentication', {})
-x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
-client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
-hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
-password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
-username = st.text_input('Username', value=auth_data.get('username', ''))
-client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
-ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
+# Display forms even before JSON input
+col1, col2 = st.columns([2, 1])
 
-hotel_id = st.text_input('Hotel ID', key="hotel_id")
-start_date = st.date_input('Start Date', key="start_date")
-end_date = st.date_input('End Date', key="end_date")
+with col1:
+    # Attempt to use session state data if available, otherwise initialize empty
+    auth_data = st.session_state.get('config_data', {}).get('authentication', {})
+    x_app_key = st.text_input('X-App-Key', value=auth_data.get('xapikey', ''))
+    client_id = st.text_input('Client ID', value=auth_data.get('clientId', ''))
+    hostname = st.text_input('Hostname', value=auth_data.get('hostname', ''))
+    password = st.text_input('Password', value=auth_data.get('password', ''), type='password')
+    username = st.text_input('Username', value=auth_data.get('username', ''))
+    client_secret = st.text_input('Client Secret', value=auth_data.get('clientSecret', ''), type='password')
+    ext_system_code = st.text_input('External System Code', value=auth_data.get('externalSystemId', ''))
 
-retrieve_button = st.button('Retrieve Data', key='retrieve')
+with col2:
+    hotel_id = st.text_input('Hotel ID', key="hotel_id")
+    start_date = st.date_input('Start Date', key="start_date")
+    end_date = st.date_input('End Date', key="end_date")
+    retrieve_button = st.button('Retrieve Data', key='retrieve')
+
+def split_date_range(start_date, end_date, max_days=400):
+    ranges = []
+    current_start_date = start_date
+    while current_start_date < end_date:
+        current_end_date = min(current_start_date + timedelta(days=max_days - 1), end_date)
+        ranges.append((current_start_date, current_end_date))
+        current_start_date = current_end_date + timedelta(days=1)
+    return ranges
 
 def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
@@ -132,29 +147,6 @@ def data_to_excel(all_data, h_id, s_date, e_date):
     st.download_button(label='Download Excel file', data=excel_data, file_name=filename, mime='application/vnd.ms-excel')
     st.success("Your report is ready!")
 
-def split_date_range(start_date, end_date, max_days=400):
-    ranges = []
-    current_start_date = start_date
-    while current_start_date < end_date:
-        current_end_date = min(current_start_date + timedelta(days=max_days - 1), end_date)
-        ranges.append((current_start_date, current_end_date))
-        current_start_date = current_end_date + timedelta(days=1)
-    return ranges
-
-def load_csv_data(uploaded_file):
-    try:
-        content = uploaded_file.getvalue().decode("utf-8")
-        sniffer = csv.Sniffer()
-        dialect = sniffer.sniff(content.splitlines()[0])
-        juyo_data = pd.read_csv(uploaded_file, delimiter=dialect.delimiter)
-        juyo_data['arrivalDate'] = pd.to_datetime(juyo_data['arrivalDate'], errors='coerce')
-        st.success("CSV uploaded and processed!")
-        return juyo_data
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        return None
-
-# Authenticate and retrieve data
 if retrieve_button:
     with st.spinner('Processing... Please wait.'):
         token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
