@@ -101,9 +101,10 @@ def retrieve_data(location_url, token, x_key, h_id):
       
 def data_to_excel(all_data, h_id, s_date, e_date):
     dfs = []
+    print("All data:", all_data)  # Add this line for debugging
     for data in all_data:
-        print("Data:", data)
-        if 'revInvStats' in data:  # Check if the key 'revInvStats' exists in the data
+        print("Data:", data)  # Add this line for debugging
+        if 'revInvStats' in data:
             df = pd.json_normalize(data['revInvStats'])
             dfs.append(df)
         else:
