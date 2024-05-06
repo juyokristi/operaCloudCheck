@@ -141,15 +141,15 @@ with col2:
     end_date = st.date_input('End Date', key="end_date")
     if st.button('Retrieve Data', key='retrieve'):
         st.write("Retrieving data...")
-        token = authenticate(...)
+        token = authenticate(hostname, x_app_key, client_id, client_secret, username, password)
         if token:
-            location_url = start_async_process(...)
+            location_url = start_async_process(token, hostname, x_app_key, hotel_id, ext_system_code, start_date, end_date)
             if location_url:
-                final_location_url = wait_for_data_ready(...)
+                final_location_url = wait_for_data_ready(location_url, token, x_app_key, hotel_id)
                 if final_location_url:
-                    all_data = retrieve_data(...)
+                    all_data = retrieve_data(final_location_url, token, x_app_key, hotel_id)
                     if all_data:
-                        data_to_excel(all_data, ...)
+                        data_to_excel(all_data, hotel_id, start_date, end_date)
                         st.success("Data retrieval and processing complete.")
 
 # Additional feature: Upload and compare CSV data
