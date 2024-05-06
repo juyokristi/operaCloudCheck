@@ -66,7 +66,7 @@ if comparison_file and 'all_data' in st_session_state:
     result_df = compare_and_display_results(st.session_state['all_data'], comparison_df)
     st.table(result_df)
 
-ddef authenticate(host, x_key, client, secret, user, passw):
+def authenticate(host, x_key, client, secret, user, passw):
     url = f"{host}/oauth/v1/tokens"
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
